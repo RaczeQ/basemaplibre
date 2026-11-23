@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-23
+
 ### Added
 
 - `add_basemap`, `add_attribution`, `set_cache_dir` and `STYLES`, moved from `ml2drender.basemap`
@@ -20,3 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - An attribution shared by two basemaps of the same axes was written twice
+
+[Unreleased]: https://github.com/RaczeQ/basemaplibre/compare/0.1.0...HEAD
+
+[0.1.0]: https://github.com/RaczeQ/basemaplibre/releases/tag/0.1.0
