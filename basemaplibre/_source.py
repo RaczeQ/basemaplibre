@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 Source = str | os.PathLike[str] | dict[str, Any]
-Labels = bool | Literal["only"]
+Labels = bool | Literal["only", "above"]
 
 
 def _imagery(url: str, attribution: str, max_zoom: int) -> dict[str, Any]:
@@ -184,7 +184,7 @@ def with_labels(style: dict[str, Any], labels: Labels) -> dict[str, Any]:
     if labels is True:
         return style
     if labels is not False and labels != "only":
-        raise ValueError(f"labels must be True, False or 'only', not {labels!r}")
+        raise ValueError(f"labels must be True, False, 'only' or 'above', not {labels!r}")
     layers = [
         layer
         for layer in style.get("layers", [])

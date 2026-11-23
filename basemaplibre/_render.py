@@ -153,9 +153,10 @@ def attribution_text(values: Iterable[object]) -> str:
     texts: list[str] = []
     for value in values:
         if isinstance(value, str):
-            text = " ".join(unescape(re.sub(r"<[^>]*>", "", value)).split())
-            if text and text not in texts:
-                texts.append(text)
+            plain = " ".join(unescape(re.sub(r"<[^>]*>", "", value)).split())
+            for text in plain.split(" | "):  # joined before: of a basemap drawn earlier
+                if text and text not in texts:
+                    texts.append(text)
     return " | ".join(
         text for text in texts if not any(text in other for other in texts if other != text)
     )

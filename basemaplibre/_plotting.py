@@ -33,6 +33,8 @@ _CSS_PER_INCH = 96
 # figures of the default dpi get twice their resolution, sharp on those screens and saved at twice
 # their dpi; figures of a higher dpi, theirs.
 _MIN_DPI = 2 * _CSS_PER_INCH
+# Above the data, whose zorder is 1 to 3 by default.
+_LABELS_ZORDER = 9
 
 
 def add_basemap(
@@ -98,9 +100,10 @@ def add_basemap(
             None.
         timeout (float | tuple[float, float], optional): Limit of each request in seconds, or of
             connecting and reading. Defaults to None, which is no limit as in contextily.
-        labels (bool | "only", optional): Whether to draw the style's symbol layers (labels and
-            icons). "only" draws nothing else, as an overlay above the data (`zorder` 9 unless
-            given). Defaults to True.
+        labels (bool | "only" | "above", optional): Whether to draw the style's symbol layers
+            (labels and icons). "only" draws nothing else, as an overlay above the data (`zorder` 9
+            unless given). "above" draws the rest under the data and the labels above it (at
+            `zorder` 9, other arguments of `imshow` as given), in two images. Defaults to True.
         pixel_ratio (float, optional): Image pixels per CSS pixel; with `zoom="auto"`, `dpi / 96`
             matches a figure of `dpi`. Defaults to None: 192 pixels to the inch of the figure, or
             its dpi if higher, so figures of the default dpi get twice their resolution, for HiDPI
@@ -179,15 +182,19 @@ def add_basemap(
         axes_ratio = max(display.width / width, display.height / height) * max(width, height) / size
         pixel_ratio = axes_ratio * max(1, _MIN_DPI / ax.figure.dpi)
     box = projected_box((left, bottom, right, top), size, pixel_ratio)
-    image, text = render(style, target, box, labels, load, headers, timeout)
+    # All are rendered before one is drawn, so an error leaves no half of a basemap.
+    parts: list[Labels] = [False, "only"] if labels == "above" else [labels]
+    rendered = [render(style, target, box, part, load, headers, timeout) for part in parts]
     if labels == "only":
-        extra_imshow_args.setdefault("zorder", 9)
+        extra_imshow_args.setdefault("zorder", _LABELS_ZORDER)
     extra_imshow_args.setdefault("aspect", ax.get_aspect())  # imshow's default would make it equal
-    ax.imshow(image, extent=extent, interpolation=interpolation, **extra_imshow_args)
+    for image, _ in rendered:
+        ax.imshow(image, extent=extent, interpolation=interpolation, **extra_imshow_args)
+        extra_imshow_args["zorder"] = _LABELS_ZORDER  # of the second image: "above", the labels
     if reset_extent:
         ax.axis((xmin, xmax, ymin, ymax))
     if attribution is None or attribution is True:
-        attribution = text
+        attribution = attribution_text(text for _, text in rendered)
     if attribution:
         # Basemaps drawn over one another (a hillshade over a map) share one attribution.
         drawn = [artist for artist in ax.texts if isinstance(artist, Attribution)]

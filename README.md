@@ -45,19 +45,18 @@ bml.add_basemap(ax, crs=gdf.crs, source="OpenFreeMap.Positron")
 - `source` is a MapLibre style: a `dict`, the URL of its JSON, a name of `STYLES` (default `OpenFreeMap.Liberty`) or a local `.json` file. Other sources (an `xyzservices` provider, a URL of raster tiles, a raster file) are left to `contextily.add_basemap`, with a `UserWarning`. contextily is not a dependency: install it for those.
 - The style is drawn directly in `crs` (anything `pyproj.CRS.from_user_input` reads) if ml2drender [supports the projection](https://github.com/Kanahiro/ml2drender#projected-coordinate-reference-systems), so `resampling` is ignored. Axes that stretch latitudes, as GeoPandas does in EPSG:4326, get the projection they show, so labels keep their shape.
 - `zoom` is contextily's zoom of 256-pixel tiles (the style is evaluated at MapLibre zoom `zoom - 1`); `"auto"` draws the style at its size on a web page. The image has 192 pixels to the inch of the figure, or its dpi if higher. Lay the figure out (`layout="constrained"`) before adding the basemap.
-- New: `labels=False` drops the labels and icons, `labels="only"` draws only them, above the data; `pixel_ratio` sets the resolution; `load` replaces fetching with HTTPX. OpenHistoricalMap's styles are drawn as of today, as on its website.
+- New: `labels=False` drops the labels and icons, `labels="only"` draws only them, above the data, and `labels="above"` draws the map under the data and its labels above it; `pixel_ratio` sets the resolution; `load` replaces fetching with HTTPX. OpenHistoricalMap's styles are drawn as of today, as on its website.
 - Downloads are cached on disk as in contextily (`set_cache_dir` keeps them across sessions), but for the style and its TileJSON, which name the current tiles. Failed requests are tried twice more.
 
 ## Styles
 
 `STYLES` has maps of the world (OpenFreeMap, VersaTiles, CARTO, Maptoolkit, OpenHistoricalMap, MapLibre) and of national mapping agencies (basemap.de, swisstopo, IGN, PDOK, GSI), terrain (Mapterhorn) and imagery (VersaTiles, EOX, USGS, GSI, PDOK, IGN). The [gallery](https://raczeq.github.io/basemaplibre/gallery/) shows each of them, with the coverage and terms of their services: check the terms before heavy use.
 
-`Mapterhorn.Hillshade` is transparent, to shade another basemap:
+`Mapterhorn.Hillshade` is transparent, to shade another basemap (here, under its labels):
 
 ```python
-bml.add_basemap(ax, source="OpenFreeMap.Positron", labels=False)
+bml.add_basemap(ax, source="OpenFreeMap.Positron", labels="above")
 bml.add_basemap(ax, source="Mapterhorn.Hillshade")
-bml.add_basemap(ax, source="OpenFreeMap.Positron", labels="only")
 ```
 
 ## Development

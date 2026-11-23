@@ -10,3 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `add_basemap`, `add_attribution`, `set_cache_dir` and `STYLES`, moved from `ml2drender.basemap`
+- `labels="above"`: the map under the data and its labels above it, in one call
+
+### Fixed
+
+- An attribution shared by two basemaps of the same axes was written twice

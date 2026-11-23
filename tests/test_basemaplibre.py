@@ -7,6 +7,7 @@ Nothing is fetched from the internet: styles are inline or served locally, and c
 import asyncio
 import concurrent.futures
 import datetime
+import io
 import json
 import math
 import sys
@@ -261,6 +262,8 @@ class SourceTest(unittest.TestCase):
             _render.attribution_text([html, None, 3, "Tiles", html]),
             "© OpenStreetMap contributors | Tiles",
         )
+        # Texts joined before (and wrapped, as drawn) are taken apart to find those repeated.
+        self.assertEqual(_render.attribution_text(["A | B", "B |\nC"]), "A | B | C")
         # One part of another is left out.
         texts = [html, "Tiles", "© OpenStreetMap contributors · ESA"]
         self.assertEqual(
@@ -438,6 +441,71 @@ class AddBasemapTest(unittest.TestCase):
         # contextily's warping of raster tiles does not apply: ignored.
         with self.assertWarnsRegex(UserWarning, "resampling is ignored"):
             self.assertEqual(pixel(basemap(ax, source=STYLE, resampling="nearest"), *CENTER), RED)
+
+    def test_labels_above(self):
+        # Blue icons (a symbol layer) at the center, from a source of their own and from one that a
+        # line layer draws too.
+        image = io.BytesIO()
+        plt.imsave(image, np.full((32, 32, 4), BLUE, np.uint8), format="png")
+        sprite = {"dot": {"x": 0, "y": 0, "width": 32, "height": 32, "pixelRatio": 1}}
+        point = {"type": "Point", "coordinates": [15, 45]}
+        dots = {"type": "Feature", "properties": {}, "geometry": point}
+        files = {
+            "https://example.com/sprite.json": json.dumps(sprite).encode(),
+            "https://example.com/sprite.png": image.getvalue(),
+            "https://example.com/sprite@2x.json": json.dumps(sprite).encode(),
+            "https://example.com/sprite@2x.png": image.getvalue(),
+            "https://example.com/dots.json": json.dumps(dots).encode(),
+        }
+
+        async def load(url):
+            return files[url]
+
+        spec = style(attribution="Square") | {"sprite": "https://example.com/sprite"}
+        spec["sources"] |= {
+            "shared": {"type": "geojson", "data": dots, "attribution": "Shared"},
+            "dots": {
+                "type": "geojson",
+                "data": "https://example.com/dots.json",
+                "attribution": "Dots",
+            },
+        }
+        spec["layers"].append({"id": "line", "type": "line", "source": "shared"})
+        for name in ["shared", "dots"]:
+            layer = {"id": name, "type": "symbol", "source": name}
+            spec["layers"].append({**layer, "layout": {"icon-image": "dot"}})
+
+        def drawn(**options):
+            ax = axes()
+            bml.add_basemap(ax, source=spec, load=load, **options)
+            return ax
+
+        # The map, then its labels above the data (green, over all of the map).
+        ax = axes()
+        ax.axhspan(*EXTENT[2:], color="lime")
+        bml.add_basemap(ax, source=spec, load=load, labels="above", attribution=False)
+        ax.figure.canvas.draw()
+        figure = np.asarray(ax.figure.canvas.buffer_rgba())
+        self.assertEqual(figure[192, 192].tolist(), BLUE)
+        self.assertEqual(figure[20, 20].tolist(), GREEN)
+        below, above = ax.images
+        self.assertEqual((below.get_zorder(), above.get_zorder()), (0, 9))
+        self.assertEqual(pixel(below, *CENTER), RED)
+        self.assertEqual(pixel(above, *CORNER)[3], 0)
+        # Other arguments of imshow are those of both, but the zorder: that of the map.
+        below, above = drawn(labels="above", alpha=0.5, zorder=-1).images
+        self.assertEqual((below.get_alpha(), above.get_alpha()), (0.5, 0.5))
+        self.assertEqual((below.get_zorder(), above.get_zorder()), (-1, 9))
+        # One attribution, as of the whole style.
+        for labels in [True, "above"]:
+            texts = [text.get_text() for text in drawn(labels=labels).texts]
+            self.assertEqual(texts, ["Square | Shared | Dots"])
+        # Nothing is drawn if the labels cannot be.
+        del files["https://example.com/dots.json"]
+        ax = axes()
+        with self.assertRaises(KeyError):
+            bml.add_basemap(ax, source=spec, load=load, labels="above")
+        self.assertEqual((len(ax.images), len(ax.texts)), (0, 0))
 
     def test_attribution(self):
         def texts(**options):
