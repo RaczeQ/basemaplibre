@@ -85,4 +85,4 @@ uv run zensical serve  # preview them
 uv run python scripts/readme.py  # draw the images of the README
 ```
 
-The notebooks in `examples/` are kept without outputs: they are executed when the docs are built, on release. What that writes to `docs/` (the executed notebooks, the gallery) is not committed.
+The notebooks in `examples/` are kept without outputs: they are executed when the docs are built, on release.
