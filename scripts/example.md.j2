@@ -1,0 +1,7 @@
+{#- The page of an example notebook: its Markdown, under a Colab badge. -#}
+{%- extends 'markdown/index.md.j2' -%}
+
+{%- block header -%}
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RaczeQ/basemaplibre/blob/main/examples/{{ resources.metadata.name }}.ipynb)
+
+{% endblock header %}

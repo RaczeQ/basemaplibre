@@ -1,0 +1,8 @@
+nav:
+  - Home: index.md
+  - Examples:
+      - examples/quickstart.md
+      - examples/*.md
+  - Style gallery: gallery.md
+  - API reference: api.md
+  - Changelog: changelog.md
