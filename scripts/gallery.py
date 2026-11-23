@@ -4,6 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import NamedTuple
 
+import httpx
 import matplotlib
 import matplotlib.pyplot as plt
 import pyproj
@@ -145,10 +146,16 @@ def main() -> None:
         for name in names:
             print(name, flush=True)
             figure = plt.figure(figsize=(WIDTH, HEIGHT))
-            draw(figure.add_axes((0, 0, 1, 1)), name)
-            figure.savefig(IMAGES / f"{name}.webp", dpi=200, pil_kwargs={"quality": 85})
+            image = f"![{name}](gallery/{name}.webp)"
+            try:
+                draw(figure.add_axes((0, 0, 1, 1)), name)
+                figure.savefig(IMAGES / f"{name}.webp", dpi=200, pil_kwargs={"quality": 85})
+            except httpx.HTTPError as error:
+                # Services may refuse the machines of CI, as OpenHistoricalMap's does with 403.
+                print(f"::warning title={name} is missing from the gallery::{error!r}", flush=True)
+                image = "*No image: the service could not be used when this page was drawn.*"
             plt.close(figure)
-            page.append(f"-   ![{name}](gallery/{name}.webp)\n\n    `{name}`")
+            page.append(f"-   {image}\n\n    `{name}`")
         page.append("</div>")
     (DOCS / "gallery.md").write_text("\n\n".join(page) + "\n", encoding="utf-8")
 
