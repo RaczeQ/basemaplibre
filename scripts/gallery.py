@@ -113,7 +113,7 @@ def draw(name: str, service: Service) -> None:
     # The attribution of styles that carry one is None: theirs.
     attribution = None if name.startswith(("IGN.Ortho", "PDOK.Luchtfoto")) else service.attribution
     bml.add_basemap(ax, source=name, attribution=attribution, attribution_size=5)
-    figure.savefig(IMAGES / f"{name}.webp", dpi=192, pil_kwargs={"quality": 85})
+    figure.savefig(IMAGES / f"{name}.webp", dpi=200, pil_kwargs={"quality": 85})
     plt.close(figure)
 
 

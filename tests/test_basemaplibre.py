@@ -10,6 +10,7 @@ import datetime
 import io
 import json
 import math
+import pickle
 import sys
 import tempfile
 import types
@@ -281,8 +282,8 @@ class AddBasemapTest(unittest.TestCase):
         self.assertEqual(ax.axis(), EXTENT)  # the limits are kept
         [artist] = ax.images
         np.testing.assert_allclose(artist.get_extent(), EXTENT)
-        # Twice the resolution of the axes (384 x 384 pixels).
-        self.assertEqual(artist.get_array().shape, (768, 768, 4))
+        # 200 pixels to the inch of the axes (4 x 4 inches).
+        self.assertEqual(artist.get_array().shape, (800, 800, 4))
         self.assertEqual(pixel(artist, *CENTER), RED)
         self.assertEqual(pixel(artist, EXTENT[0] + 1, EXTENT[2] + 1), WHITE)
         self.assertEqual([text.get_text() for text in ax.texts], ["© Square"])
@@ -305,14 +306,14 @@ class AddBasemapTest(unittest.TestCase):
         self.assertEqual(
             (color(zoom=5.4), color(zoom=5.6), color(zoom_adjust=0.6)), (RED, GREEN, GREEN)
         )
-        # A figure of 192 dpi or more gets its own resolution (768 x 768 pixels here).
+        # A figure of 200 dpi or more gets its own resolution (1200 x 1200 pixels here).
         ax = axes()
-        ax.figure.set_dpi(192)
+        ax.figure.set_dpi(300)
         artist = basemap(ax, source=spec)
-        self.assertEqual((artist.get_array().shape, pixel(artist, *CORNER)), ((768, 768, 4), RED))
-        # A zoom too low for the extent: one CSS pixel, still at twice the resolution of the axes.
+        self.assertEqual((artist.get_array().shape, pixel(artist, *CORNER)), ((1200, 1200, 4), RED))
+        # A zoom too low for the extent: one CSS pixel, still at 200 pixels to the inch.
         artist = basemap(source=spec, zoom=-6)
-        self.assertEqual((artist.get_array().shape, pixel(artist, *CORNER)), ((768, 768, 4), BLACK))
+        self.assertEqual((artist.get_array().shape, pixel(artist, *CORNER)), ((800, 800, 4), BLACK))
         # pixel_ratio sets the resolution only.
         artist = basemap(source=spec, zoom=6, pixel_ratio=0.25)
         self.assertEqual((artist.get_array().shape, pixel(artist, *CORNER)), ((192, 192, 4), GREEN))
@@ -358,7 +359,7 @@ class AddBasemapTest(unittest.TestCase):
             axes(extent), source=style(background=ZOOMS), crs="EPSG:4326", attribution=False
         )
         np.testing.assert_allclose(artist.get_extent(), extent)
-        self.assertEqual(artist.get_array().shape, (768, 768, 4))
+        self.assertEqual(artist.get_array().shape, (800, 800, 4))
         self.assertEqual(
             [pixel(artist, *point) for point in [(16.9, 46.4), (17.1, 46.6)]], [RED, GREEN]
         )
@@ -373,11 +374,12 @@ class AddBasemapTest(unittest.TestCase):
         height, width = basemap(ax, source=STYLE).get_array().shape[:2]
         figure.draw_without_rendering()
         box = ax.get_window_extent()
-        # Within a CSS pixel (two pixels): the short side is drawn in whole CSS pixels.
-        np.testing.assert_allclose((width, height), (2 * box.width, 2 * box.height), atol=2)
+        # Within a CSS pixel (200 / 96 pixels): the short side is drawn in whole CSS pixels.
+        size = (200 / 96 * box.width, 200 / 96 * box.height)
+        np.testing.assert_allclose((width, height), size, atol=200 / 96)
         ax = axes(extent)
         ax.set_aspect("equal")
-        self.assertEqual(basemap(ax, source=STYLE).get_array().shape, (384, 768, 4))
+        self.assertEqual(basemap(ax, source=STYLE).get_array().shape, (400, 800, 4))
 
     def test_historical(self):
         # A style of OpenHistoricalMap's tiles (unused here) is drawn as of today: a square of 1800
@@ -597,6 +599,227 @@ class AddBasemapTest(unittest.TestCase):
             )
 
 
+def zoomed(factor, extent=EXTENT):
+    """`extent` around its center, `factor` times as wide and high."""
+    left, right, bottom, top = extent
+    (x, y), (width, height) = ((left + right) / 2, (bottom + top) / 2), (right - left, top - bottom)
+    half = factor * width / 2, factor * height / 2
+    return (x - half[0], x + half[0], y - half[1], y + half[1])
+
+
+class DrawTest(unittest.TestCase):
+    """Basemaps are rendered anew for the axes as they are drawn."""
+
+    def tearDown(self):
+        plt.close("all")
+
+    def shape(self, artist, **options):
+        """The shape of the image drawn: on the screen, or saved with options of `savefig`."""
+        figure = artist.axes.figure
+        if options:
+            figure.savefig(io.BytesIO(), **options)
+        else:
+            figure.canvas.draw()
+        return artist.get_array().shape[:2]
+
+    def test_unchanged(self):
+        artist = basemap(source=STYLE)
+        image = artist.get_array()
+        for options in [{}, {"dpi": 100}, {"dpi": 200}, {"format": "pdf"}, {"format": "svg"}]:
+            with self.subTest(**options):
+                self.assertEqual(self.shape(artist, **options), (800, 800))
+                self.assertIs(artist.get_array(), image)
+
+    def test_resolution(self):
+        # That of the figure as drawn, 200 pixels to the inch or more.
+        for options in [{}, {"interpolation": "none"}]:
+            artist = basemap(source=STYLE, **options)
+            for form in ["png", "pdf", "svg"]:
+                with self.subTest(form=form, **options):
+                    self.assertEqual(self.shape(artist, format=form, dpi=300), (1200, 1200))
+                    self.assertEqual(self.shape(artist), (800, 800))
+        # With two images, which vector graphics draw as one.
+        basemap(artist.axes, source=STYLE)
+        self.assertEqual(self.shape(artist, format="pdf", dpi=300), (1200, 1200))
+        # pixel_ratio is kept.
+        artist = basemap(source=STYLE, pixel_ratio=1)
+        self.assertEqual(self.shape(artist, dpi=300), (384, 384))
+        # As is the map: its zoom, which is automatic (4) or given (contextily's 6 is 5).
+        for zoom, color in [("auto", RED), (6, GREEN)]:
+            artist = basemap(source=style(background=ZOOMS), zoom=zoom)
+            self.assertEqual(self.shape(artist, dpi=300), (1200, 1200))
+            self.assertEqual(pixel(artist, *CORNER), color)
+
+    def test_size(self):
+        artist = basemap(source=STYLE)
+        artist.axes.set_aspect("equal")
+        artist.axes.figure.set_size_inches(2, 1)
+        self.assertEqual(self.shape(artist), (200, 200))
+        # The zoom of an automatic one follows (MapLibre's 3), one given does not.
+        for zoom, color in [("auto", BLACK), (6, GREEN)]:
+            artist = basemap(source=style(background=ZOOMS), zoom=zoom)
+            artist.axes.figure.set_size_inches(2, 2)
+            self.assertEqual(self.shape(artist), (400, 400))
+            self.assertEqual(pixel(artist, *CORNER), color)
+        # Axes smaller than a pixel (a tiny window) are drawn with the image there was.
+        artist.axes.set_position((0, 0, 1, 1e-3))
+        self.assertEqual(self.shape(artist), (400, 400))
+
+    def test_limits(self):
+        # The zoom follows the limits, so labels keep their size: an automatic one (4) and one given
+        # (contextily's 6 is 5) are 1 more in half the extent.
+        for zoom, colors in [("auto", [GREEN, BLACK]), (6, [BLUE, RED])]:
+            artist = basemap(source=style(background=ZOOMS), zoom=zoom)
+            ax = artist.axes
+            limits = ax.dataLim.frozen().extents
+            for factor, color in zip([0.5, 2], colors, strict=True):
+                extent = zoomed(factor)
+                ax.axis(extent)
+                with self.subTest(zoom=zoom, factor=factor):
+                    self.assertEqual(self.shape(artist), (800, 800))
+                    self.assertEqual(ax.axis(), extent)
+                    self.assertEqual(artist.get_extent(), extent)
+                    self.assertEqual(pixel(artist, extent[0], extent[3]), color)
+            # The limits of the data are those of the basemap added.
+            np.testing.assert_array_equal(ax.dataLim.extents, limits)
+        # Beyond the map, and inverted.
+        ax.axis((EXTENT[1] + 10 * TURN, EXTENT[0] + 10 * TURN, *EXTENT[2:]))
+        self.assertEqual(self.shape(artist), (800, 800))
+
+    def test_crs(self):
+        # In the CRS given, stretched as drawn.
+        extent = (10, 20, 42.5, 47.5)
+        artist = basemap(axes(extent), source=STYLE, crs="EPSG:4326")
+        artist.axes.axis(zoomed(0.8, extent))
+        self.assertEqual(self.shape(artist), (800, 800))
+        self.assertEqual(
+            [pixel(artist, *point) for point in [(16.9, 46.4), (17.1, 46.6)]], [RED, WHITE]
+        )
+        artist.axes.figure.set_size_inches(4, 2)
+        self.assertEqual(self.shape(artist), (400, 800))
+
+    def test_labels_above(self):
+        ax = axes()
+        bml.add_basemap(ax, source=STYLE, labels="above")
+        ax.axis(zoomed(2))
+        for artist in ax.images:
+            self.assertEqual(self.shape(artist, dpi=300), (1200, 1200))
+            self.assertEqual(artist.get_extent(), zoomed(2))
+
+    def test_layout(self):
+        # A layout made after the basemap, by the figure or the caller.
+        def check(artist):
+            height, width = self.shape(artist)
+            box = artist.axes.get_window_extent()
+            self.assertAlmostEqual(box.width, box.height)
+            np.testing.assert_allclose((width, height), 200 / 96 * box.width, atol=1)
+
+        for layout in ["constrained", None]:
+            with self.subTest(layout=layout):
+                figure, axs = plt.subplots(1, 2, figsize=(4, 4), dpi=96, layout=layout)
+                for ax in axs:
+                    ax.axis(EXTENT)
+                    ax.set_aspect("equal")
+                artist = basemap(axs[0], source=STYLE)
+                image = artist.get_array()
+                figure.suptitle("Title")
+                axs[1].set_ylabel("Label")
+                # Adding another does not render it: drawing does.
+                basemap(axs[1], source=STYLE)
+                self.assertIs(artist.get_array(), image)
+                if layout is None:
+                    figure.tight_layout()
+                check(artist)
+                self.assertIsNot(artist.get_array(), image)
+
+    def test_attribution(self):
+        # That of a source shown by zooming in is added.
+        async def load(url):
+            if url.endswith(".json"):
+                tiles = ["https://example.com/{z}/{x}/{y}.pbf"]
+                return json.dumps({"tiles": tiles, "attribution": url[-6]}).encode()
+            return None
+
+        sources = {
+            name: {"type": "vector", "url": f"https://example.com/{name}.json"} for name in "AB"
+        }
+        layers = [
+            {"id": name, "type": "line", "source": name, "source-layer": "x", "minzoom": minzoom}
+            for name, minzoom in [("A", 0), ("B", 4.5)]
+        ]
+        spec = {"version": 8, "sources": sources, "layers": layers}
+        for attribution, expected in [
+            (None, [["A"], ["A | B"]]),
+            ("custom", [["custom"], ["custom"]]),
+            (False, [[], []]),
+        ]:
+            ax = axes()
+            artist = basemap(ax, source=spec, load=load, attribution=attribution)
+            texts = []
+            for extent in [EXTENT, zoomed(0.5)]:
+                ax.axis(extent)
+                self.shape(artist)
+                texts.append([text.get_text() for text in ax.texts])
+            self.assertEqual(texts, expected)
+
+    def test_pan(self):
+        # Dragged, the image moves with the axes: it is rendered when dropped.
+        artist = basemap(source=STYLE)
+        ax, image = artist.axes, artist.get_array()
+        ax.start_pan(192, 192, 1)
+        ax.drag_pan(1, None, 292, 192)
+        self.shape(artist)
+        self.assertIs(artist.get_array(), image)
+        np.testing.assert_allclose(artist.get_extent(), EXTENT)
+        ax.end_pan()
+        self.shape(artist)
+        self.assertEqual(artist.get_extent(), ax.axis())
+        self.assertEqual(pixel(artist, *CENTER), RED)
+
+    def test_changed_style(self):
+        # Changed by the caller since, as to draw another: drawn as it was given.
+        spec = style()
+        artist = basemap(source=spec)
+        spec["layers"].pop()
+        artist.axes.axis(zoomed(2))
+        self.shape(artist)
+        self.assertEqual(pixel(artist, *CENTER), RED)
+
+    def test_errors(self):
+        # Raised, leaving the image as it was; the next drawing tries again.
+        async def load(url):
+            if broken:
+                raise OSError(url)
+            return json.dumps(STYLE["sources"]["square"]["data"]).encode()
+
+        broken = False
+        spec = style()
+        spec["sources"]["square"]["data"] = "https://example.com/square.json"
+        artist = basemap(source=spec, load=load)
+        image = artist.get_array()
+        artist.axes.axis(zoomed(2))
+        broken = True
+        for _ in range(2):
+            with self.assertRaises(OSError):
+                self.shape(artist)
+            self.assertIs(artist.get_array(), image)
+            np.testing.assert_allclose(artist.get_extent(), EXTENT)
+        broken = False
+        self.assertEqual(self.shape(artist), (800, 800))
+        self.assertEqual(artist.get_extent(), zoomed(2))
+
+    def test_pickle(self):
+        # The copy keeps the image it has (the loader, a local function, is not pickled).
+        async def load(url):
+            return None
+
+        artist = basemap(source=STYLE, load=load)
+        [copy] = pickle.loads(pickle.dumps(artist.axes.figure)).axes[0].images
+        copy.axes.axis(zoomed(2))
+        self.assertEqual(self.shape(copy, dpi=300), (800, 800))
+        self.assertEqual(copy.get_extent(), artist.get_extent())
+
+
 class ContextilyTest(unittest.TestCase):
     """Sources that are not MapLibre styles go to contextily."""
 
@@ -803,6 +1026,15 @@ class HttpTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 basemap(source=f"{self.base}/missing.json")
             self.assertEqual(len(list(cache.iterdir())), 2 * (len(fetched) - 2))
+
+    def test_redraw(self):
+        # A basemap fetches its style and TileJSON once, however many times it is rendered.
+        artist = basemap(source=f"{self.base}/style.json", labels="above")
+        artist.axes.axis(zoomed(2))
+        artist.axes.figure.canvas.draw()
+        self.assertEqual(artist.get_extent(), zoomed(2))
+        paths = [path for path, _ in self.requests]
+        self.assertEqual([paths.count(path) for path in ["/style.json", "/tilejson.json"]], [1, 1])
 
     def test_timeout(self):
         # None is no time limit, as in contextily.

@@ -282,7 +282,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1,<1" },
-    { name = "matplotlib", specifier = ">=3.9" },
+    { name = "matplotlib", specifier = ">=3.9.1" },
     { name = "ml2drender", specifier = ">=0.4.3" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pyproj", specifier = ">=3.6" },

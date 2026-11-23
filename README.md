@@ -2,7 +2,7 @@
 
 Basemaps for [matplotlib](https://matplotlib.org/) and [GeoPandas](https://geopandas.org/) from [MapLibre styles](https://maplibre.org/maplibre-style-spec/), with the parameters of [contextily](https://contextily.readthedocs.io/)'s `add_basemap`.
 
-contextily downloads raster tiles in Web Mercator, merges them and warps them to the CRS of your data. `basemaplibre` renders the style (vector tiles, labels, icons) with [ml2drender](https://github.com/Kanahiro/ml2drender) once, for the extent of the axes, at their resolution and directly in their CRS, so labels stay upright and sharp. No GPU, no browser, no system libraries.
+contextily downloads raster tiles in Web Mercator, merges them and warps them to the CRS of your data. `basemaplibre` renders the style (vector tiles, labels, icons) with [ml2drender](https://github.com/Kanahiro/ml2drender) for the extent of the axes, at their resolution and directly in their CRS, so labels stay upright and sharp. No GPU, no browser, no system libraries.
 
 <p align="center">
     <img alt="GitHub" src="https://img.shields.io/github/license/raczeq/basemaplibre?logo=mit&logoColor=%23fff">
@@ -44,8 +44,9 @@ bml.add_basemap(ax, crs=gdf.crs, source="OpenFreeMap.Positron")
 
 - `source` is a MapLibre style: a `dict`, the URL of its JSON, a name of `STYLES` (default `OpenFreeMap.Liberty`) or a local `.json` file. Other sources (an `xyzservices` provider, a URL of raster tiles, a raster file) are left to `contextily.add_basemap`, with a `UserWarning`. contextily is not a dependency: install it for those.
 - The style is drawn directly in `crs` (anything `pyproj.CRS.from_user_input` reads) if ml2drender [supports the projection](https://github.com/Kanahiro/ml2drender#projected-coordinate-reference-systems), so `resampling` is ignored. Axes that stretch latitudes, as GeoPandas does in EPSG:4326, get the projection they show, so labels keep their shape.
-- `zoom` is contextily's zoom of 256-pixel tiles (the style is evaluated at MapLibre zoom `zoom - 1`); `"auto"` draws the style at its size on a web page. The image has 192 pixels to the inch of the figure, or its dpi if higher. Lay the figure out (`layout="constrained"`) before adding the basemap.
-- New: `labels=False` drops the labels and icons, `labels="only"` draws only them, above the data, and `labels="above"` draws the map under the data and its labels above it; `pixel_ratio` sets the resolution; `load` replaces fetching with HTTPX. OpenHistoricalMap's styles are drawn as of today, as on its website.
+- `zoom` is contextily's zoom of 256-pixel tiles (the style is evaluated at MapLibre zoom `zoom - 1`); `"auto"` draws the style at its size on a web page.
+- The basemap is rendered when it is added, and again when the axes are drawn with other limits, at another size or at another dpi: it stays sharp and up to date after zooming, panning, `fig.tight_layout()` or `fig.savefig(dpi=300)`. Rendering may download tiles, and its errors are raised where the figure is drawn. The image has the dpi the figure is drawn at, but 200 pixels to the inch at least.
+- New: `labels=False` drops the labels and icons, `labels="only"` draws only them, above the data, and `labels="above"` draws the map under the data and its labels above it; `pixel_ratio` fixes the resolution; `load` replaces fetching with HTTPX. OpenHistoricalMap's styles are drawn as of today, as on its website.
 - Downloads are cached on disk as in contextily (`set_cache_dir` keeps them across sessions), but for the style and its TileJSON, which name the current tiles. Failed requests are tried twice more.
 
 ## Styles
