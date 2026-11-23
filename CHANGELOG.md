@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `add_basemap`, `add_attribution`, `set_cache_dir` and `STYLES`, moved from `ml2drender.basemap`
 - `labels="above"`: the map under the data and its labels above it, in one call
+- Basemaps are rendered again when the axes are drawn with other limits, at another size or dpi
+
+### Changed
+
+- The image has 200 pixels to the inch of the figure at least (it had 192), so figures of the default dpi are rendered once for HiDPI screens too
 
 ### Fixed
 

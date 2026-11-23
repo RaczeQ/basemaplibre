@@ -1,14 +1,17 @@
 """Basemaps and attributions on matplotlib axes."""
 
+import copy
 import importlib
 import reprlib
 import warnings
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from matplotlib import cbook
 from matplotlib.text import Text
 
 from basemaplibre._attribution import PAD, Attribution, font_family
+from basemaplibre._image import BasemapImage, Framing
 from basemaplibre._render import (
     Loader,
     Timeout,
@@ -16,8 +19,6 @@ from basemaplibre._render import (
     attribution_text,
     check_zoom,
     crs_of,
-    on_screen,
-    projected_box,
     render,
 )
 from basemaplibre._source import Labels, Source, misspelled, resolve
@@ -27,12 +28,6 @@ if TYPE_CHECKING:
     from matplotlib.text import Annotation
 
 ATTRIBUTION_SIZE = 8
-# CSS pixels in an inch: with the automatic zoom, a style's 12 px text is 9 points high on paper.
-_CSS_PER_INCH = 96
-# The image's pixels per inch of the figure, at least (two per CSS pixel, as on HiDPI screens):
-# figures of the default dpi get twice their resolution, sharp on those screens and saved at twice
-# their dpi; figures of a higher dpi, theirs.
-_MIN_DPI = 2 * _CSS_PER_INCH
 # Above the data, whose zorder is 1 to 3 by default.
 _LABELS_ZORDER = 9
 
@@ -64,9 +59,11 @@ def add_basemap(
     stretch the latitudes of a geographic CRS (as GeoPandas does) get the equidistant cylindrical
     projection they show, so labels keep their shape.
 
-    The image covers the extent of the axes exactly. Their size is read as drawn (after the layout
-    engine of the figure, such as `layout="constrained"`, and their aspect), but a layout made later
-    (`fig.tight_layout()`) stretches the image: lay the figure out first.
+    The image covers the extent of the axes exactly, at the resolution of the figure. It is rendered
+    here, so that errors are raised, and again whenever the axes are drawn with other limits, at
+    another size or at another resolution: after zooming, panning or `fig.tight_layout()`, or by
+    `fig.savefig(dpi=300)`. That may download tiles, and raises its errors where the figure is
+    drawn.
 
     Styles of OpenHistoricalMap's tiles are drawn as of today, as on its website.
 
@@ -78,8 +75,9 @@ def add_basemap(
         ax (Axes): Axes to draw on, with their extent in `crs`.
         zoom (float | "auto", optional): Level of detail as in contextily: the zoom of 256-pixel XYZ
             tiles of the same scale, which may be fractional (the style is evaluated at MapLibre
-            zoom `zoom - 1`). "auto" draws the style at its size on a web page (96 CSS pixels to the
-            inch of the figure). Defaults to "auto".
+            zoom `zoom - 1`), for the limits the axes have now. "auto" draws the style at its size
+            on a web page (96 CSS pixels to the inch of the figure). Either follows the axes as they
+            are zoomed. Defaults to "auto".
         source (Source, optional): MapLibre style: a style dict, the URL of a style JSON, a name of
             `STYLES` or a local `.json` file. Any other source (a tile provider or its name, a URL
             of tiles, a raster file) is contextily's: it is drawn by `contextily.add_basemap` with
@@ -104,10 +102,10 @@ def add_basemap(
             (labels and icons). "only" draws nothing else, as an overlay above the data (`zorder` 9
             unless given). "above" draws the rest under the data and the labels above it (at
             `zorder` 9, other arguments of `imshow` as given), in two images. Defaults to True.
-        pixel_ratio (float, optional): Image pixels per CSS pixel; with `zoom="auto"`, `dpi / 96`
-            matches a figure of `dpi`. Defaults to None: 192 pixels to the inch of the figure, or
-            its dpi if higher, so figures of the default dpi get twice their resolution, for HiDPI
-            screens and saving at twice their dpi.
+        pixel_ratio (float, optional): Image pixels per CSS pixel, whatever the resolution of the
+            figure; with `zoom="auto"`, `dpi / 96` is that of a figure of `dpi`. Defaults to None:
+            the dpi the figure is drawn at, but 200 pixels to the inch at least, sharp on HiDPI
+            screens.
         load (Loader, optional): Async `load(url)` that returns the bytes, or None for a missing
             resource. It replaces fetching over HTTP, and runs on a private event loop. Defaults to
             None.
@@ -159,49 +157,49 @@ def add_basemap(
     # The size and limits of ax as drawn: set by the layout engine of the figure (constrained,
     # tight) and the aspect.
     figure = ax.figure.figure
-    if figure.get_layout_engine() is not None:
-        figure.draw_without_rendering()
+    if (engine := figure.get_layout_engine()) is not None:
+        engine.execute(figure)
     ax.apply_aspect()
-    xmin, xmax, ymin, ymax = ax.axis()
-    (left, right), (bottom, top) = sorted((xmin, xmax)), sorted((ymin, ymax))
-    extent = (left, right, bottom, top)
-    display = ax.get_window_extent()
-    stretch = 1.0
-    if display.width:
-        stretch = display.height * (right - left) / (display.width * (top - bottom))
-    target, (left, bottom, right, top) = on_screen(crs_of(crs), (left, bottom, right, top), stretch)
-    width, height = right - left, top - bottom
-    if level is None:
-        scale = _CSS_PER_INCH / ax.figure.dpi * max(display.width / width, display.height / height)
-        scale *= 2 ** (zoom_adjust or 0)
-    else:
-        scale = 256 * 2**level / target.units_per_turn  # level: a zoom of 256-pixel XYZ tiles
-    # The long side in whole CSS pixels (at least one): the scale drawn.
-    size = max(1, round(max(width, height) * scale))
-    if pixel_ratio is None:
-        axes_ratio = max(display.width / width, display.height / height) * max(width, height) / size
-        pixel_ratio = axes_ratio * max(1, _MIN_DPI / ax.figure.dpi)
-    box = projected_box((left, bottom, right, top), size, pixel_ratio)
+    limits = ax.axis()
+    framing = Framing(crs_of(crs), level, zoom_adjust or 0, pixel_ratio)
+    view = framing.view(ax)
+    if level is not None:
+        # The zoom of these limits: with others, it changes as the automatic one does.
+        framing = framing._replace(size=view.size)
     # All are rendered before one is drawn, so an error leaves no half of a basemap.
     parts: list[Labels] = [False, "only"] if labels == "above" else [labels]
-    rendered = [render(style, target, box, part, load, headers, timeout) for part in parts]
+    style = copy.deepcopy(style)  # the caller may change it before the axes are drawn
+    kept: dict[str, bytes] = {}
+    renders = [
+        partial(render, style, labels=part, load=load, headers=headers, timeout=timeout, kept=kept)
+        for part in parts
+    ]
+    rendered = [render_view(view.crs, view.box) for render_view in renders]
     if labels == "only":
         extra_imshow_args.setdefault("zorder", _LABELS_ZORDER)
     extra_imshow_args.setdefault("aspect", ax.get_aspect())  # imshow's default would make it equal
-    for image, _ in rendered:
-        ax.imshow(image, extent=extent, interpolation=interpolation, **extra_imshow_args)
+    images = []
+    for rgba, _ in rendered:
+        images.append(
+            ax.imshow(rgba, extent=view.extent, interpolation=interpolation, **extra_imshow_args)
+        )
         extra_imshow_args["zorder"] = _LABELS_ZORDER  # of the second image: "above", the labels
     if reset_extent:
-        ax.axis((xmin, xmax, ymin, ymax))
-    if attribution is None or attribution is True:
-        attribution = attribution_text(text for _, text in rendered)
-    if attribution:
-        # Basemaps drawn over one another (a hillshade over a map) share one attribution.
-        drawn = [artist for artist in ax.texts if isinstance(artist, Attribution)]
-        if drawn:
-            drawn[-1].set_text(attribution_text([drawn[-1].get_text(), str(attribution)]))
-        else:
-            add_attribution(ax, str(attribution), font_size=attribution_size)
+        ax.axis(limits)
+    own = attribution is None or attribution is True
+    text = attribution_text(text for _, text in rendered) if own else attribution
+    artist = _attribute(ax, str(text), attribution_size) if text else None
+    for image, render_view in zip(images, renders, strict=True):
+        BasemapImage.of(image, framing, view, render_view, artist if own else None)
+
+
+def _attribute(ax: "Axes", text: str, font_size: float) -> "Annotation":
+    """Add `text` to the attribution of `ax`, which the basemaps drawn over one another share."""
+    drawn = [artist for artist in ax.texts if isinstance(artist, Attribution)]
+    if not drawn:
+        return add_attribution(ax, text, font_size=font_size)
+    drawn[-1].set_text(attribution_text([drawn[-1].get_text(), text]))
+    return drawn[-1]
 
 
 def _contextily(

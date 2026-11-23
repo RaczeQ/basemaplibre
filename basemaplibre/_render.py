@@ -248,11 +248,12 @@ async def _render(
     load: Loader | None,
     headers: dict[str, str] | None,
     timeout: Timeout,
+    kept: dict[str, bytes],
 ) -> tuple[bytes, str]:
     async with contextlib.AsyncExitStack() as stack:
-        # The style and its TileJSON are not cached: they name the current tiles, whose URLs may
-        # change with the data (OpenFreeMap's carry its date), so a kept copy could point to tiles
-        # removed since.
+        # The style and its TileJSON are not cached on disk, only in `kept`: they name the current
+        # tiles, whose URLs may change with the data (OpenFreeMap's carry its date), so a copy of an
+        # earlier session could point to tiles removed since.
         current: set[str] = set()
         if load is None:
             client = await stack.enter_async_context(_client(headers, timeout))
@@ -262,10 +263,18 @@ async def _render(
                 return await _fetch(client, url, file)
 
             load = fetch
+        get = load
+
+        async def keeping(url: str) -> bytes | None:
+            data = kept[url] if url in kept else await get(url)
+            if data is not None and url in current:
+                kept[url] = data
+            return data
+
         spec = style
         if isinstance(spec, str):
             current.add(spec)
-            data = await load(spec)
+            data = await keeping(spec)
             if data is None:
                 raise ValueError(f"style not found: {spec}")
             spec = json.loads(data)
@@ -291,10 +300,9 @@ async def _render(
             *(source.get("attribution") for source in drawn),
         ]
         tilejsons = {source["url"] for source in drawn if isinstance(source.get("url"), str)}
-        get = load
 
         async def tracked(url: str) -> bytes | None:
-            data = await get(url)
+            data = await keeping(url)
             if data is not None and url in tilejsons:
                 with contextlib.suppress(ValueError, AttributeError):
                     attributions.append(json.loads(data).get("attribution"))
@@ -312,9 +320,15 @@ def render(
     load: Loader | None = None,
     headers: dict[str, str] | None = None,
     timeout: Timeout = None,
+    kept: dict[str, bytes] | None = None,
 ) -> tuple["NDArray[np.uint8]", str]:
-    """Return the RGBA image of `box` of `crs` and the attribution of the style's sources."""
-    rgba, attribution = run(_render(style, crs, box, labels, load, headers, timeout))
+    """
+    Return the RGBA image of `box` of `crs` and the attribution of the style's sources.
+
+    The style and its TileJSON are put in `kept`, if given, for other renders of the style.
+    """
+    kept = {} if kept is None else kept
+    rgba, attribution = run(_render(style, crs, box, labels, load, headers, timeout, kept))
     width, height = box.pixels
     image = np.frombuffer(rgba, dtype=np.uint8).reshape(height, width, 4).copy()
     return image, attribution
