@@ -16,6 +16,10 @@ contextily downloads raster tiles in Web Mercator, merges them and warps them to
 
 [Documentation](https://raczeq.github.io/basemaplibre/) · [Style gallery](https://raczeq.github.io/basemaplibre/gallery/) · [API reference](https://raczeq.github.io/basemaplibre/api/)
 
+<p align="center">
+    <img src="https://raw.githubusercontent.com/RaczeQ/basemaplibre/main/images/compare.webp" alt="The same axes in EPSG:3035 with the default basemaps of contextily, whose labels are turned and blurred, and of basemaplibre">
+</p>
+
 ## Installation
 
 ```bash
@@ -32,6 +36,12 @@ gdf = geopandas.read_file("districts.gpkg")
 ax = gdf.plot(alpha=0.5, edgecolor="k")
 bml.add_basemap(ax, crs=gdf.crs, source="OpenFreeMap.Positron")
 ```
+
+`labels="above"` draws the map under your data and its labels above it:
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/RaczeQ/basemaplibre/main/images/labels.webp" alt="A choropleth over a basemap with its labels hidden by the data, and with labels above it">
+</p>
 
 | | |
 |---|---|
@@ -53,6 +63,10 @@ bml.add_basemap(ax, crs=gdf.crs, source="OpenFreeMap.Positron")
 
 `STYLES` has maps of the world (OpenFreeMap, VersaTiles, CARTO, Maptoolkit, OpenHistoricalMap, MapLibre) and of national mapping agencies (basemap.de, swisstopo, IGN, PDOK, GSI), terrain (Mapterhorn) and imagery (VersaTiles, EOX, USGS, GSI, PDOK, IGN). The [gallery](https://raczeq.github.io/basemaplibre/gallery/) shows each of them, with the coverage and terms of their services: check the terms before heavy use.
 
+<p align="center">
+    <img src="https://raw.githubusercontent.com/RaczeQ/basemaplibre/main/images/styles.webp" alt="Maps of nine of the named styles">
+</p>
+
 `Mapterhorn.Hillshade` is transparent, to shade another basemap (here, under its labels):
 
 ```python
@@ -68,6 +82,7 @@ uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
 uv run tox             # tests
 uv run tox -e docs     # execute the notebooks, draw the gallery, build the docs to site/
 uv run zensical serve  # preview them
+uv run python scripts/readme.py  # draw the images of the README
 ```
 
-The notebooks in `examples/` are kept without outputs: they are executed when the docs are built, on release.
+The notebooks in `examples/` are kept without outputs: they are executed when the docs are built, on release. What that writes to `docs/` (the executed notebooks, the gallery) is not committed.

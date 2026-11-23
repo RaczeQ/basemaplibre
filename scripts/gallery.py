@@ -7,6 +7,7 @@ from typing import NamedTuple
 import matplotlib
 import matplotlib.pyplot as plt
 import pyproj
+from matplotlib.axes import Axes
 
 import basemaplibre as bml
 
@@ -100,21 +101,19 @@ PLACES: dict[str, Place] = {
 }
 
 
-def draw(name: str, service: Service) -> None:
-    """Save a map of a style."""
+def draw(ax: Axes, name: str, attribution_size: float = 5) -> None:
+    """Draw a style at its place, at the size and aspect of `ax`."""
+    service = SERVICES[name.split(".")[0]]
     place = PLACES.get(name, FUJI if "Terrain" in name else service.place)
     longitude, latitude, half_width = place
     x, y = pyproj.Transformer.from_crs(4326, 3857, always_xy=True).transform(longitude, latitude)
     half_height = half_width * HEIGHT / WIDTH
-    figure = plt.figure(figsize=(WIDTH, HEIGHT))
-    ax = figure.add_axes((0, 0, 1, 1))
     ax.axis((x - half_width, x + half_width, y - half_height, y + half_height))
+    ax.set_aspect("equal")
     ax.set_axis_off()
     # The attribution of styles that carry one is None: theirs.
     attribution = None if name.startswith(("IGN.Ortho", "PDOK.Luchtfoto")) else service.attribution
-    bml.add_basemap(ax, source=name, attribution=attribution, attribution_size=5)
-    figure.savefig(IMAGES / f"{name}.webp", dpi=200, pil_kwargs={"quality": 85})
-    plt.close(figure)
+    bml.add_basemap(ax, source=name, attribution=attribution, attribution_size=attribution_size)
 
 
 def main() -> None:
@@ -145,7 +144,10 @@ def main() -> None:
         ]
         for name in names:
             print(name, flush=True)
-            draw(name, service)
+            figure = plt.figure(figsize=(WIDTH, HEIGHT))
+            draw(figure.add_axes((0, 0, 1, 1)), name)
+            figure.savefig(IMAGES / f"{name}.webp", dpi=200, pil_kwargs={"quality": 85})
+            plt.close(figure)
             page.append(f"-   ![{name}](gallery/{name}.webp)\n\n    `{name}`")
         page.append("</div>")
     (DOCS / "gallery.md").write_text("\n\n".join(page) + "\n", encoding="utf-8")
