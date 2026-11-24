@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     from matplotlib.text import Annotation
 
 ATTRIBUTION_SIZE = 8
-# Above the data, whose zorder is 1 to 3 by default.
-_LABELS_ZORDER = 9
+# Above the data, whose zorder is 1 to 3 by default, and below the legend and inset axes, at 5.
+LABELS_ZORDER = 4
 
 
 def add_basemap(
@@ -47,6 +47,8 @@ def add_basemap(
     timeout: Timeout = None,
     *,
     labels: Labels = True,
+    labels_zorder: float = LABELS_ZORDER,
+    attribution_zorder: float | None = None,
     pixel_ratio: float | None = None,
     load: Loader | None = None,
     **extra_imshow_args: Any,
@@ -54,10 +56,11 @@ def add_basemap(
     """
     Draw a basemap rendered from a MapLibre style under the data of the axes.
 
-    The parameters are those of contextily's `add_basemap`; `labels`, `pixel_ratio` and `load` are
-    new. The style is drawn directly in `crs`, if ml2drender supports its projection. Axes that
-    stretch the latitudes of a geographic CRS (as GeoPandas does) get the equidistant cylindrical
-    projection they show, so labels keep their shape.
+    The parameters are those of contextily's `add_basemap`; `labels`, `labels_zorder`,
+    `attribution_zorder`, `pixel_ratio` and `load` are new. The style is drawn directly in `crs`, if
+    ml2drender supports its projection. Axes that stretch the latitudes of a geographic CRS (as
+    GeoPandas does) get the equidistant cylindrical projection they show, so labels keep their
+    shape.
 
     The image covers the extent of the axes exactly, at the resolution of the figure. It is rendered
     here, so that errors are raised, and again whenever the axes are drawn with other limits, at
@@ -99,9 +102,12 @@ def add_basemap(
         timeout (float | tuple[float, float], optional): Limit of each request in seconds, or of
             connecting and reading. Defaults to None, which is no limit as in contextily.
         labels (bool | "only" | "above", optional): Whether to draw the style's symbol layers
-            (labels and icons). "only" draws nothing else, as an overlay above the data (`zorder` 9
-            unless given). "above" draws the rest under the data and the labels above it (at
-            `zorder` 9, other arguments of `imshow` as given), in two images. Defaults to True.
+            (labels and icons). "only" draws nothing else, as an overlay above the data. "above"
+            draws the rest under the data and the labels above it, in two images. Defaults to True.
+        labels_zorder (float, optional): `zorder` of the labels "only" (unless `zorder` is given)
+            or "above". Defaults to 4: above the data, below the legend and inset axes.
+        attribution_zorder (float, optional): `zorder` of the attribution. Defaults to None: above
+            the basemap and its labels, by 1, but 10 at least, above the legend too.
         pixel_ratio (float, optional): Image pixels per CSS pixel, whatever the resolution of the
             figure; with `zoom="auto"`, `dpi / 96` is that of a figure of `dpi`. Defaults to None:
             the dpi the figure is drawn at, but 200 pixels to the inch at least, sharp on HiDPI
@@ -176,19 +182,25 @@ def add_basemap(
     ]
     rendered = [render_view(view.crs, view.box) for render_view in renders]
     if labels == "only":
-        extra_imshow_args.setdefault("zorder", _LABELS_ZORDER)
+        extra_imshow_args.setdefault("zorder", labels_zorder)
     extra_imshow_args.setdefault("aspect", ax.get_aspect())  # imshow's default would make it equal
     images = []
     for rgba, _ in rendered:
         images.append(
             ax.imshow(rgba, extent=view.extent, interpolation=interpolation, **extra_imshow_args)
         )
-        extra_imshow_args["zorder"] = _LABELS_ZORDER  # of the second image: "above", the labels
+        extra_imshow_args["zorder"] = labels_zorder  # of the second image: "above", the labels
     if reset_extent:
         ax.axis(limits)
     own = attribution is None or attribution is True
     text = attribution_text(text for _, text in rendered) if own else attribution
     artist = _attribute(ax, str(text), attribution_size) if text else None
+    if artist is not None:
+        if attribution_zorder is None:
+            # Never below that of a basemap drawn before.
+            above = (image.get_zorder() + 1 for image in images)
+            attribution_zorder = max(artist.get_zorder(), *above)
+        artist.set_zorder(attribution_zorder)
     for image, render_view in zip(images, renders, strict=True):
         BasemapImage.of(image, framing, view, render_view, artist if own else None)
 
