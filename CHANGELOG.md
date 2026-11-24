@@ -10,11 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `labels_zorder` of `add_basemap`: the `zorder` of the labels drawn above the data
-- `attribution_zorder` of `add_basemap`, by default above the basemap and the legend
+- `zorder` of `add_attribution`
 
 ### Changed
 
 - The labels drawn above the data are below the legend and inset axes of matplotlib (`zorder` 4, it was 9)
+- The attribution stays above basemaps and labels drawn at a `zorder` of 10 or above
 
 ## [0.1.0] - 2026-11-23
 

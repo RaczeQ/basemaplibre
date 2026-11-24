@@ -48,7 +48,6 @@ def add_basemap(
     *,
     labels: Labels = True,
     labels_zorder: float = LABELS_ZORDER,
-    attribution_zorder: float | None = None,
     pixel_ratio: float | None = None,
     load: Loader | None = None,
     **extra_imshow_args: Any,
@@ -56,11 +55,10 @@ def add_basemap(
     """
     Draw a basemap rendered from a MapLibre style under the data of the axes.
 
-    The parameters are those of contextily's `add_basemap`; `labels`, `labels_zorder`,
-    `attribution_zorder`, `pixel_ratio` and `load` are new. The style is drawn directly in `crs`, if
-    ml2drender supports its projection. Axes that stretch the latitudes of a geographic CRS (as
-    GeoPandas does) get the equidistant cylindrical projection they show, so labels keep their
-    shape.
+    The parameters are those of contextily's `add_basemap`; `labels`, `labels_zorder`, `pixel_ratio`
+    and `load` are new. The style is drawn directly in `crs`, if ml2drender supports its projection.
+    Axes that stretch the latitudes of a geographic CRS (as GeoPandas does) get the equidistant
+    cylindrical projection they show, so labels keep their shape.
 
     The image covers the extent of the axes exactly, at the resolution of the figure. It is rendered
     here, so that errors are raised, and again whenever the axes are drawn with other limits, at
@@ -88,8 +86,8 @@ def add_basemap(
         headers (dict[str, str], optional): HTTP headers sent with every request. Defaults to None.
         interpolation (str, optional): Interpolation of `imshow`. Defaults to "bilinear".
         attribution (str | bool, optional): Text in the corner, added to the one of a basemap drawn
-            before. None and True are the attributions of the style and the sources it draws, False
-            is none. Defaults to None.
+            before. It is above the basemap, its labels and the legend. None and True are the
+            attributions of the style and the sources it draws, False is none. Defaults to None.
         attribution_size (float, optional): Size of the attribution in points. Defaults to 8.
         reset_extent (bool, optional): Whether to keep the limits of the axes. Defaults to True.
         crs (Any, optional): CRS of the axes: anything `pyproj.CRS.from_user_input` reads, such as a
@@ -106,8 +104,6 @@ def add_basemap(
             draws the rest under the data and the labels above it, in two images. Defaults to True.
         labels_zorder (float, optional): `zorder` of the labels "only" (unless `zorder` is given)
             or "above". Defaults to 4: above the data, below the legend and inset axes.
-        attribution_zorder (float, optional): `zorder` of the attribution. Defaults to None: above
-            the basemap and its labels, by 1, but 10 at least, above the legend too.
         pixel_ratio (float, optional): Image pixels per CSS pixel, whatever the resolution of the
             figure; with `zoom="auto"`, `dpi / 96` is that of a figure of `dpi`. Defaults to None:
             the dpi the figure is drawn at, but 200 pixels to the inch at least, sharp on HiDPI
@@ -196,11 +192,8 @@ def add_basemap(
     text = attribution_text(text for _, text in rendered) if own else attribution
     artist = _attribute(ax, str(text), attribution_size) if text else None
     if artist is not None:
-        if attribution_zorder is None:
-            # Never below that of a basemap drawn before.
-            above = (image.get_zorder() + 1 for image in images)
-            attribution_zorder = max(artist.get_zorder(), *above)
-        artist.set_zorder(attribution_zorder)
+        # Above all basemaps that share it.
+        artist.set_zorder(max(artist.get_zorder(), *(image.get_zorder() + 1 for image in images)))
     for image, render_view in zip(images, renders, strict=True):
         BasemapImage.of(image, framing, view, render_view, artist if own else None)
 
@@ -234,7 +227,7 @@ def _contextily(
 
 
 def add_attribution(
-    ax: "Axes", text: str, font_size: float = ATTRIBUTION_SIZE, **kwargs: Any
+    ax: "Axes", text: str, font_size: float = ATTRIBUTION_SIZE, *, zorder: float = 10, **kwargs: Any
 ) -> "Annotation":
     """
     Write a text in the bottom right corner of the axes, as MapLibre's attribution control does.
@@ -248,6 +241,7 @@ def add_attribution(
         ax (Axes): Axes to write on.
         text (str): Text to write.
         font_size (float, optional): Size of the text in points. Defaults to 8.
+        zorder (float, optional): `zorder` of the text. Defaults to 10: above the legend.
         **kwargs (Any): Passed to matplotlib's `Annotation`, over these defaults.
 
     Returns:
@@ -270,7 +264,7 @@ def add_attribution(
         "fontfamily": font_family(),
         "horizontalalignment": "right",
         "verticalalignment": "bottom",
-        "zorder": 10,
+        "zorder": zorder,
         "clip_on": True,
         "parse_math": False,
         "bbox": {

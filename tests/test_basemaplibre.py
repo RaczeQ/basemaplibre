@@ -535,14 +535,13 @@ class AddBasemapTest(unittest.TestCase):
         # Korean.
         family = bml.add_attribution(axes(), "地理院").get_fontfamily()
         self.assertEqual(family[: len(plt.rcParams["font.family"])], plt.rcParams["font.family"])
-        # Above the legend, the images of the basemap and those drawn before, unless given.
+        # Above the legend, the images of the basemap and those drawn before.
         ax = axes()
         for options, expected in [
             ({}, 10),
             ({"labels": "above", "labels_zorder": 9.5}, 10.5),
             ({"zorder": 20}, 21),
             ({"zorder": 12}, 21),
-            ({"attribution_zorder": 3}, 3),
         ]:
             basemap(ax, source=style(attribution="Square"), **options)
             self.assertEqual([text.get_zorder() for text in ax.texts], [expected])
@@ -585,6 +584,7 @@ class AddBasemapTest(unittest.TestCase):
             (text.get_text(), text.get_size(), text.get_ha(), list(ax.texts)),
             ("Test", 8, "right", [text]),
         )
+        self.assertEqual(bml.add_attribution(axes(), "Test", zorder=5).get_zorder(), 5)
         # In the bottom right corner of the axes.
         ax.figure.canvas.draw()
         box = text.get_bbox_patch().get_window_extent()
