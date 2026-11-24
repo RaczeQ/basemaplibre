@@ -535,6 +535,18 @@ class AddBasemapTest(unittest.TestCase):
         # Korean.
         family = bml.add_attribution(axes(), "地理院").get_fontfamily()
         self.assertEqual(family[: len(plt.rcParams["font.family"])], plt.rcParams["font.family"])
+        # Above the legend, the images of the basemap and those drawn before, unless given.
+        ax = axes()
+        for options, expected in [
+            ({}, 10),
+            ({"labels": "above", "labels_zorder": 9.5}, 10.5),
+            ({"zorder": 20}, 21),
+            ({"zorder": 12}, 21),
+            ({"attribution_zorder": 3}, 3),
+        ]:
+            basemap(ax, source=style(attribution="Square"), **options)
+            self.assertEqual([text.get_zorder() for text in ax.texts], [expected])
+        self.assertGreater(10, ax.legend([]).get_zorder())
         # Basemaps drawn over one another share one attribution.
         ax = axes()
         basemap(ax, source=style(attribution="Square"))

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `labels_zorder` of `add_basemap`: the `zorder` of the labels drawn above the data
+- `attribution_zorder` of `add_basemap`, by default above the basemap and the legend
 
 ### Changed
 
