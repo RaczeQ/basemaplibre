@@ -434,9 +434,11 @@ class AddBasemapTest(unittest.TestCase):
         )
         # Labels only: an overlay above the data (no symbol layer here, so nothing is drawn).
         overlay = basemap(ax, source=STYLE, labels="only")
-        self.assertEqual(overlay.get_zorder(), 9)
+        self.assertEqual(overlay.get_zorder(), 4)
         self.assertFalse(np.asarray(overlay.get_array())[:, :, 3].any())
         self.assertEqual(basemap(ax, source=STYLE, labels="only", zorder=2).get_zorder(), 2)
+        overlay = basemap(ax, source=STYLE, labels="only", labels_zorder=2.5)
+        self.assertEqual(overlay.get_zorder(), 2.5)
         self.assertEqual(basemap(ax, source=STYLE, labels=False).get_zorder(), 0)
         with self.assertRaises(ValueError):
             basemap(ax, source=STYLE, labels="none")
@@ -491,13 +493,22 @@ class AddBasemapTest(unittest.TestCase):
         self.assertEqual(figure[192, 192].tolist(), BLUE)
         self.assertEqual(figure[20, 20].tolist(), GREEN)
         below, above = ax.images
-        self.assertEqual((below.get_zorder(), above.get_zorder()), (0, 9))
+        self.assertEqual((below.get_zorder(), above.get_zorder()), (0, 4))
         self.assertEqual(pixel(below, *CENTER), RED)
         self.assertEqual(pixel(above, *CORNER)[3], 0)
         # Other arguments of imshow are those of both, but the zorder: that of the map.
         below, above = drawn(labels="above", alpha=0.5, zorder=-1).images
         self.assertEqual((below.get_alpha(), above.get_alpha()), (0.5, 0.5))
-        self.assertEqual((below.get_zorder(), above.get_zorder()), (-1, 9))
+        self.assertEqual((below.get_zorder(), above.get_zorder()), (-1, 4))
+        below, above = drawn(labels="above", labels_zorder=8).images
+        self.assertEqual((below.get_zorder(), above.get_zorder()), (0, 8))
+        # Above the data and below the legends of matplotlib.
+        ax = axes()
+        line = ax.plot(*CENTER, "o", label="data")[0]
+        bml.add_basemap(ax, source=spec, load=load, labels="above")
+        zorders = [line.get_zorder(), ax.images[1].get_zorder(), ax.legend().get_zorder()]
+        self.assertEqual(zorders, sorted(set(zorders)))
+        self.assertGreater(ax.inset_axes((0, 0, 1, 1)).get_zorder(), ax.images[1].get_zorder())
         # One attribution, as of the whole style.
         for labels in [True, "above"]:
             texts = [text.get_text() for text in drawn(labels=labels).texts]

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `labels_zorder` of `add_basemap`: the `zorder` of the labels drawn above the data
+
+### Changed
+
+- The labels drawn above the data are below the legend and inset axes of matplotlib (`zorder` 4, it was 9)
+
 ## [0.1.0] - 2026-11-23
 
 ### Added
