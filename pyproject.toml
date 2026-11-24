@@ -1,6 +1,6 @@
 [project]
 name = "basemaplibre"
-version = "0.1.0"
+version = "0.1.1"
 description = "Basemaps for matplotlib and GeoPandas from MapLibre styles, inspired by contextily."
 readme = "README.md"
 authors = [{ name = "Kamil Raczycki", email = "kraczycki@kraina.ai" }]
@@ -135,7 +135,7 @@ close-quotes-on-newline = true
 wrap-one-line = true
 
 [tool.bumpver]
-current_version = "0.1.0"
+current_version = "0.1.1"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "chore(CI/CD): bump version {old_version} -> {new_version}"
 commit = true
